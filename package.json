@@ -1,0 +1,16 @@
+{
+  "name": "dsh-plugin-luoxi",
+  "version": "0.1.0",
+  "description": "把 QQ 消息桥接到 DeepSeek Harness 的 ACP 会话（洛希）",
+  "type": "module",
+  "bin": {
+    "dsh-plugin-luoxi": "bin/luoxi.mjs"
+  },
+  "files": ["bin", "src", "README.md", "LICENSE"],
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "keywords": ["dsh-plugin", "deepseek-harness", "qq", "acp"],
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
