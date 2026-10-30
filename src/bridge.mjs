@@ -1,11 +1,11 @@
-// QQ 桥客户端：连 127.0.0.1 上的 QQ Agent，收 event.*，发 action.*。
+// 洛希桥客户端：连 127.0.0.1 上的 宿主，收 event.*，发 action.*。
 import { WebSocket } from 'ws';
 
 const PROTOCOL = 1;
 const ACTION_TIMEOUT_MS = 30000;
 
 export class BridgeClient {
-  constructor({ url, token, name = 'dsh-plugin-luoxi', version = '0.1.0', log = () => {}, onMessage, onCommand, onOpen, onClose } = {}) {
+  constructor({ url, token, name = 'luoxi-plugin-dsh', version = '0.1.0', log = () => {}, onMessage, onCommand, onOpen, onClose } = {}) {
     this.url = url;
     this.token = token;
     this.name = name;
@@ -43,7 +43,7 @@ export class BridgeClient {
         if (message.type === 'hello.ok') {
           this.retry = 1000;
           settled = true;
-          this.log(`[bridge] 已连上 ${this.url}（${message.bot?.name ?? 'qq-agent'}）`);
+          this.log(`[bridge] 已连上 ${this.url}（${message.bot?.name ?? 'luoxi-host'}）`);
           this.onOpen(message);
           resolve(message);
           return;

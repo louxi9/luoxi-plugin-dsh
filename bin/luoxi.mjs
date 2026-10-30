@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// dsh-plugin-luoxi：把 QQ 桥过来的任务交给 DeepSeek Harness（ACP），再把回答送回 QQ。
+// luoxi-plugin-dsh：把 洛希桥过来的任务交给 DeepSeek Harness（ACP），再把回答送回 会话。
 // 用法见 README；所有参数也支持环境变量（LUOXI_*）。
 import path from 'node:path';
 import { AcpClient } from '../src/acp.mjs';
@@ -24,7 +24,7 @@ const checkOnly = has('--check');
 const log = (line) => console.log(`[luoxi] ${line}`);
 
 if (!token) {
-  console.error('缺少 token：用 --token 或 LUOXI_BRIDGE_TOKEN 指定（在 QQ Agent 的「DeepSeek → QQ 通道」里复制）。');
+  console.error('缺少 token：用 --token 或 LUOXI_BRIDGE_TOKEN 指定（在 宿主 的「DeepSeek → 洛希通道」里复制）。');
   process.exit(2);
 }
 if (!dshBin) {
@@ -47,7 +47,7 @@ const acp = new AcpClient({
     const options = (params?.options ?? []).map(option => ({ id: String(option.optionId ?? ''), label: String(option.name ?? option.kind ?? '选项') }));
     if (!chatKey || !bridgeRef) return null;
     const title = params?.toolCall?.title ?? params?.toolCall?.kind ?? '工具调用';
-    log(`等待 QQ 审批：${title}`);
+    log(`等待 会话审批：${title}`);
     const choice = await bridgeRef.requestApproval({ chatKey, title, detail: params?.toolCall?.rawInput ? JSON.stringify(params.toolCall.rawInput).slice(0, 300) : '', options });
     return choice || null;
   },
@@ -124,7 +124,7 @@ const bridge = new BridgeClient({
 bridgeRef = bridge;
 log(`工作区 ${workspace}`);
 bridge.connect().catch((error) => {
-  console.error(`[luoxi] 连接 QQ Agent 失败：${error?.message ?? error}`);
+  console.error(`[luoxi] 连接 宿主 失败：${error?.message ?? error}`);
   process.exit(1);
 });
 

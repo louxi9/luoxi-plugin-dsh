@@ -1,5 +1,5 @@
-// 端到端：假 QQ 桥 + 真 dsh acp + 插件本体。
-// 用法：node dsh-plugin-luoxi/test/e2e.mjs
+// 端到端：假 洛希桥 + 真 dsh acp + 插件本体。
+// 用法：node luoxi-plugin-dsh/test/e2e.mjs
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,7 +28,7 @@ wss.on('connection', (ws) => {
     const msg = JSON.parse(String(data));
     if (msg.type === 'hello') {
       if (msg.token !== token) { ws.close(4001, 'bad token'); return; }
-      ws.send(JSON.stringify({ type: 'hello.ok', protocol: 1, commands: { prefix: '/dsh' }, bot: { name: 'fake-qqa' } }));
+      ws.send(JSON.stringify({ type: 'hello.ok', protocol: 1, commands: { prefix: '/dsh' }, bot: { name: 'fake-host' } }));
       setTimeout(() => ws.send(JSON.stringify({
         type: 'event.message', seq: 1,
         chat: { key: 'private:10001', type: 'private' },
@@ -64,7 +64,7 @@ for (let i = 0; i < 120; i += 1) {
 const text = received[0]?.text ?? '';
 console.log('--- 插件输出 ---');
 console.log(output.trim().split('\n').slice(-12).join('\n'));
-console.log('--- 回给 QQ ---');
+console.log('--- 回给 会话 ---');
 console.log(JSON.stringify(text));
 
 child.kill();
