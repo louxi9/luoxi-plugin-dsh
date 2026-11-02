@@ -26,7 +26,16 @@ export class BridgeClient {
 
   connect() {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.url);
+      let ws;
+      try {
+        ws = new WebSocket(this.url);
+      } catch (error) {
+        // 地址写错（协议/端口非法）时别把进程抛死：记一条日志继续按退避重试。
+        this.log(`[bridge] 地址无效：${error?.message ?? error}`);
+        this.#scheduleReconnect();
+        resolve(null);
+        return;
+      }
       this.ws = ws;
       let settled = false;
       const fail = (error) => {
@@ -54,10 +63,11 @@ export class BridgeClient {
           return;
         }
         if (message.type === 'result' && this.pending.has(message.id)) {
-          const { resolve: done, timer } = this.pending.get(message.id);
+          const { resolve: done, reject: failAction, timer } = this.pending.get(message.id);
           this.pending.delete(message.id);
           clearTimeout(timer);
-          done(message);
+          if (message.ok === false) failAction(new Error(message.error ?? '动作失败'));
+          else done(message);
           return;
         }
         if (message.type === 'approval.decision' && this.approvals.has(message.id)) {
@@ -74,6 +84,9 @@ export class BridgeClient {
         this.ws = null;
         for (const { reject: rejectAction, timer } of this.pending.values()) { clearTimeout(timer); rejectAction(new Error('连接已断开')); }
         this.pending.clear();
+        // 审批请求在断线后不会再有 decision：立刻按拒绝收尾，别让 ACP 干等 120 秒。
+        for (const done of this.approvals.values()) { try { done(null); } catch { /* 已处理 */ } }
+        this.approvals.clear();
         if (!settled) fail(new Error(`连接关闭 code=${code}`));
         this.onClose(code);
         if (!this.closed) this.#scheduleReconnect();
@@ -85,7 +98,8 @@ export class BridgeClient {
     const delay = this.retry;
     this.retry = Math.min(this.retry * 2, 30000);
     this.log(`[bridge] ${Math.round(delay / 1000)}s 后重连`);
-    setTimeout(() => { if (!this.closed) this.connect().catch(() => {}); }, delay).unref?.();
+    // 不要 unref：ACP 还没起来时这是进程里唯一的活动句柄，unref 会让进程静默退出。
+    setTimeout(() => { if (!this.closed) this.connect().catch(() => {}); }, delay);
   }
 
   action(payload) {
@@ -112,8 +126,22 @@ export class BridgeClient {
     return this.action({ type: 'action.send', chatKey, text });
   }
 
+  reportTool(chatKey, sessionId, payload = {}) {
+    if (!this.ws || this.ws.readyState !== 1) return Promise.resolve();
+    try {
+      this.ws.send(JSON.stringify({ type: 'tool.report', chatKey, sessionId, ...payload }));
+    } catch { /* 连接刚断，丢掉这条 */ }
+    return Promise.resolve();
+  }
+
   reportUsage(chatKey, sessionId, { inputTokens = 0, outputTokens = 0, contextUsed = 0, contextSize = 0 } = {}) {
-    return this.action({ type: 'usage.report', chatKey, sessionId, inputTokens, outputTokens, contextUsed, contextSize }).catch(() => {});
+    // 协议里 usage.report 是单向通知（宿主不回 result），不能走 action() 等回执——
+    // 否则每次用量更新都会挂一个 30 秒超时定时器。
+    if (!this.ws || this.ws.readyState !== 1) return Promise.resolve();
+    try {
+      this.ws.send(JSON.stringify({ type: 'usage.report', chatKey, sessionId, inputTokens, outputTokens, contextUsed, contextSize }));
+    } catch { /* 连接刚断，丢掉这一条即可 */ }
+    return Promise.resolve();
   }
 
   close() {

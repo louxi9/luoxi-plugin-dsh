@@ -6,13 +6,14 @@ import { spawn } from 'node:child_process';
 const REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 
 export class AcpClient {
-  constructor({ node = process.execPath, bin, env = {}, cwd = process.cwd(), permission = 'ask', onPermission = null, log = () => {} } = {}) {
+  constructor({ node = process.execPath, bin, env = {}, cwd = process.cwd(), permission = 'ask', onPermission = null, onExit = null, log = () => {} } = {}) {
     this.node = node;
     this.bin = bin;
     this.env = env;
     this.cwd = cwd;
     this.permission = permission;
     this.onPermission = onPermission;
+    this.onExit = onExit;
     this.log = log;
     this.child = null;
     this.seq = 0;
@@ -40,6 +41,8 @@ export class AcpClient {
       this.pending.clear();
       this.child = null;
       this.ready = null;
+      // 进程没了，它那边所有 session 都没了：让上层清掉会话映射，下条消息自动重建。
+      try { this.onExit?.(code); } catch { /* 回调失败不影响清理 */ }
     });
     this.ready = this.request('initialize', { protocolVersion: 1, clientCapabilities: {} })
       .then((info) => { this.log(`[dsh] ${info?.agentInfo?.name ?? 'acp'} 已就绪`); return info; });
@@ -82,8 +85,12 @@ export class AcpClient {
       const options = request.params?.options ?? [];
       let optionId = null;
       try {
-        if (this.onPermission && this.permission === 'ask') optionId = await this.onPermission(request.params);
-        else if (this.permission !== 'deny') optionId = options.find(option => /allow/i.test(String(option.kind ?? '')))?.optionId ?? null;
+        // 默认安全：只有显式 allow 才自动放行；ask 但拿不到决策（没有回调/桥断开）一律拒绝。
+        if (this.permission === 'allow') {
+          optionId = options.find(option => /allow/i.test(String(option.kind ?? '')))?.optionId ?? null;
+        } else if (this.permission === 'ask' && this.onPermission) {
+          optionId = await this.onPermission(request.params);
+        }
       } catch (error) {
         this.log(`[dsh] 权限决策失败：${error?.message ?? error}`);
       }
@@ -116,6 +123,12 @@ export class AcpClient {
   on(method, handler) {
     if (!this.handlers.has(method)) this.handlers.set(method, []);
     this.handlers.get(method).push(handler);
+  }
+
+  // 恢复一个已持久化的会话（ACP session/resume：cwd 必须与创建时一致）。
+  async resumeSession(sessionId, cwd = this.cwd) {
+    await this.start();
+    return this.request('session/resume', { sessionId, cwd, mcpServers: [] });
   }
 
   async newSession(cwd = this.cwd) {
